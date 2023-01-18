@@ -20,6 +20,7 @@ export const grab = <
           ValueOf<{
             [K in keyof CondSelections]: FromSelection<S & CondSelections[K]>;
           }>,
+          // TODO: on empty base selection, we need to ditch this.
           FromSelection<S>
         ]
       >;
