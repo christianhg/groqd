@@ -3,6 +3,7 @@ import { q } from "./index";
 import { z } from "zod";
 import { runPokemonQuery, runUserQuery } from "../test-utils/runQuery";
 import invariant from "tiny-invariant";
+import { isSafeZodArray } from "./util";
 
 describe("ArrayResult.grab/UnknownResult.grab/EntityResult.grab", () => {
   it("creates schema from unknown array schema", async () => {
@@ -12,7 +13,8 @@ describe("ArrayResult.grab/UnknownResult.grab/EntityResult.grab", () => {
 
     expect(query).toBe(`*[_type == 'pokemon']{name}`);
     expect(
-      schema instanceof z.ZodArray && schema.element instanceof z.ZodObject
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodObject
     );
     invariant(data);
     expect(data[0].name).toBe("Bulbasaur");
@@ -29,7 +31,8 @@ describe("ArrayResult.grab/UnknownResult.grab/EntityResult.grab", () => {
 
     expect(query).toBe(`*[_type == 'pokemon']{"hp": base.HP}`);
     expect(
-      schema instanceof z.ZodArray && schema.element instanceof z.ZodObject
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodObject
     );
     invariant(data);
     expect(data[0].hp).toBe(45);
@@ -147,6 +150,26 @@ describe("ArrayResult.grab/UnknownResult.grab/EntityResult.grab", () => {
     expect(data[0].foo).toBe("Bulbasaur");
     expect(data[0].bar).toBeNull();
   });
+
+  it("discards base schema if base selection empty and conditional selection present", async () => {
+    const { data } = await runPokemonQuery(
+      q("*")
+        .filter("_type == 'pokemon'")
+        .slice(0, 3)
+        .grab(
+          {},
+          {
+            "name == 'BartSimpson'": {
+              name: q.literal("BartSimpson"),
+              hp: ["base.HP", q.number()],
+            },
+          }
+        )
+    );
+
+    invariant(data);
+    expect(data).toHaveLength(0);
+  });
 });
 
 describe("UnknownResult.filter/ArrayResult.filter", () => {
@@ -156,8 +179,10 @@ describe("UnknownResult.filter/ArrayResult.filter", () => {
     );
 
     expect(query).toBe(`*[_type == 'pokemon']`);
-    expect(schema instanceof z.ZodArray).toBeTruthy();
-    expect(schema.element instanceof z.ZodUnknown).toBeTruthy();
+    expect(
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodUnknown
+    ).toBeTruthy();
     expect(Array.isArray(data) && "name" in data[0]).toBeTruthy();
   });
 
@@ -167,8 +192,10 @@ describe("UnknownResult.filter/ArrayResult.filter", () => {
     );
 
     expect(query).toBe(`*[_type == 'pokemon'][name match 'char*']`);
-    expect(schema instanceof z.ZodArray).toBeTruthy();
-    expect(schema.element instanceof z.ZodUnknown).toBeTruthy();
+    expect(
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodUnknown
+    ).toBeTruthy();
     expect(data?.length).toBe(3);
   });
 
@@ -181,8 +208,10 @@ describe("UnknownResult.filter/ArrayResult.filter", () => {
     );
 
     expect(query).toBe(`*[_type == 'pokemon']{name}[name match 'char*']`);
-    expect(schema instanceof z.ZodArray).toBeTruthy();
-    expect(schema.element instanceof z.ZodObject).toBeTruthy();
+    expect(
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodObject
+    ).toBeTruthy();
     invariant(data);
     expect(data[0].name).toEqual("Charmander");
   });
@@ -207,8 +236,10 @@ describe("ArrayResult.order", () => {
     );
 
     expect(query).toBe(`*[_type == 'pokemon']|order(name asc)`);
-    expect(schema instanceof z.ZodArray).toBeTruthy();
-    expect(schema.element instanceof z.ZodUnknown).toBeTruthy();
+    expect(
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodUnknown
+    ).toBeTruthy();
     // @ts-expect-error data is unknown type since no grab present
     expect(data?.[0]?.name).toBe("Abra");
   });
@@ -222,8 +253,10 @@ describe("ArrayResult.order", () => {
     );
 
     expect(query).toBe(`*[_type == 'pokemon']{name}|order(name desc)`);
-    expect(schema instanceof z.ZodArray).toBeTruthy();
-    expect(schema.element instanceof z.ZodObject).toBeTruthy();
+    expect(
+      isSafeZodArray(schema) &&
+        schema.innerType().element instanceof z.ZodObject
+    ).toBeTruthy();
     invariant(data);
     expect(data[0].name).toBe("Zubat");
   });
@@ -344,7 +377,7 @@ describe("ArrayResult.slice", () => {
       schema instanceof z.ZodArray && schema.element instanceof z.ZodObject
     );
     invariant(data);
-    expect(data).toEqual([{ name: "Bulbasaur", hp: 45 }, {}, {}]);
+    expect(data).toEqual([{ name: "Bulbasaur", hp: 45 }]);
   });
 });
 

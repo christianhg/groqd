@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { grab } from "./grab";
 import type { Selection } from "./grab";
+import { SafeZodArray, safeZodArray } from "./util";
 
 type Query = string;
 type Payload<T> = { schema: T; query: Query };
@@ -58,7 +59,7 @@ export class UnknownQuery extends EntityQuery<z.ZodUnknown> {
     this.query += `[${filterValue}]`;
     return new UnknownArrayQuery({
       ...this.value(),
-      schema: z.array(z.unknown()),
+      schema: safeZodArray(z.unknown()),
     });
   }
 
@@ -72,9 +73,9 @@ export class UnknownQuery extends EntityQuery<z.ZodUnknown> {
  * Array
  */
 export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
-  z.ZodArray<T>
+  SafeZodArray<T>
 > {
-  constructor(payload: Payload<z.ZodArray<T>>) {
+  constructor(payload: Payload<SafeZodArray<T>>) {
     super(payload);
   }
 
@@ -96,7 +97,7 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
   ) {
     return new ArrayQuery<GrabOneType>({
       query: this.query + `.${name}`,
-      schema: z.array(fieldSchema),
+      schema: safeZodArray(fieldSchema),
     });
   }
 
@@ -114,7 +115,7 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
     if (typeof max === "undefined") {
       return new EntityQuery({
         ...this.value(),
-        schema: this.schema.element,
+        schema: this.schema.innerType().element,
       });
     }
 
@@ -123,7 +124,7 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
 }
 
 export class UnknownArrayQuery extends ArrayQuery<z.ZodUnknown> {
-  constructor(payload: Payload<z.ZodArray<z.ZodUnknown>>) {
+  constructor(payload: Payload<SafeZodArray<z.ZodUnknown>>) {
     super(payload);
   }
 

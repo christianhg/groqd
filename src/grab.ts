@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { ValueOf } from "./types";
 import { ArrayQuery, BaseQuery, EntityQuery } from "./builder";
+import { isSafeZodArray, safeZodArray, SafeZodArray } from "./util";
 
 export const grab = <
-  T extends z.ZodTypeAny | z.ZodArray<any>,
+  T extends z.ZodTypeAny | SafeZodArray<any>,
   S extends Selection,
   CondSelections extends Record<string, Selection> | undefined
 >(
@@ -23,7 +24,7 @@ export const grab = <
         ]
       >;
 
-  type NewType = T extends z.ZodArray<any>
+  type NewType = T extends SafeZodArray<any>
     ? ArrayQuery<AllSelection>
     : EntityQuery<AllSelection>;
 
@@ -77,16 +78,21 @@ export const grab = <
       baseSchema.merge(z.object(toSchemaInput(field)))
     );
 
-    const unionEls = [...conditionalFieldSchemas, baseSchema];
+    const shouldDiscardBaseSchema =
+      Object.keys(selection).length === 0 &&
+      Object.keys(conditionalSelections || {}).length > 0;
+    const unionEls = [...conditionalFieldSchemas];
+    !shouldDiscardBaseSchema && unionEls.push(baseSchema);
+
     const s =
       unionEls.length > 1
         ? z.union([unionEls[0], unionEls[1], ...unionEls.slice(2)])
         : unionEls[0];
 
-    return schema instanceof z.ZodArray ? z.array(s) : s;
+    return isSafeZodArray(schema) ? safeZodArray(s) : s;
   })();
 
-  const res = (newSchema instanceof z.ZodArray
+  const res = (isSafeZodArray(newSchema)
     ? new ArrayQuery({
         query: query + `{${projections.join(", ")}}`,
         schema: newSchema,
