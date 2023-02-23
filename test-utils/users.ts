@@ -1,6 +1,21 @@
-const userData: { name: string; age: number; role: RoleType }[] = [
-  { name: "John", age: 20, role: "guest" },
-  { name: "Jane", age: 30, role: "admin" },
+import { sampleContentBlocks } from "./sampleContentBlocks";
+
+const userData: {
+  slug: { current: string };
+  name: string;
+  age: number;
+  role: RoleType;
+  nicknames?: string[];
+  bio?: unknown;
+}[] = [
+  {
+    slug: { current: "john" },
+    name: "John",
+    age: 20,
+    role: "guest",
+    nicknames: ["Johnny", "J Boi", "Dat Boi Doe"],
+  },
+  { slug: { current: "jane" }, name: "Jane", age: 30, role: "admin" },
 ];
 
 const users = userData.map((user) => ({
@@ -11,6 +26,7 @@ const users = userData.map((user) => ({
     _type: "reference",
     _ref: `role.${user.role}`,
   },
+  bio: sampleContentBlocks,
 }));
 
 type RoleType = "guest" | "admin";

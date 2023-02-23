@@ -2,11 +2,15 @@ import { z } from "zod";
 import { grab } from "./grab";
 import type { Selection } from "./grab";
 import { SafeZodArray, safeZodArray } from "./util";
+import {
+  nullToUndefined,
+  nullToUndefinedOnConditionalSelection,
+} from "./nullToUndefined";
 
 type Query = string;
-type Payload<T> = { schema: T; query: Query };
+type Payload<T extends z.ZodTypeAny> = { schema: T; query: Query };
 
-export class BaseQuery<T> {
+export class BaseQuery<T extends z.ZodTypeAny> {
   query: string;
   schema: T;
 
@@ -17,6 +21,21 @@ export class BaseQuery<T> {
 
   public value(): Payload<T> {
     return { schema: this.schema, query: this.query };
+  }
+
+  nullable() {
+    return new NullableBaseQuery({
+      query: this.query,
+      schema: this.schema.nullable(),
+    });
+  }
+}
+
+export class NullableBaseQuery<T extends z.ZodTypeAny> extends BaseQuery<
+  z.ZodNullable<T>
+> {
+  constructor({ schema, query }: Payload<T>) {
+    super({ schema: schema.nullable(), query });
   }
 }
 
@@ -35,6 +54,20 @@ export class EntityQuery<T extends z.ZodTypeAny> extends BaseQuery<T> {
     return grab(this.query, this.schema, selection, conditionalSelections);
   }
 
+  grab$<
+    S extends Selection,
+    CondSelections extends Record<string, Selection> | undefined
+  >(selection: S, conditionalSelections?: CondSelections) {
+    return grab(
+      this.query,
+      this.schema,
+      nullToUndefined(selection),
+      conditionalSelections
+        ? nullToUndefinedOnConditionalSelection(conditionalSelections)
+        : conditionalSelections
+    );
+  }
+
   grabOne<GrabOneType extends z.ZodType>(
     name: string,
     fieldSchema: GrabOneType
@@ -44,14 +77,24 @@ export class EntityQuery<T extends z.ZodTypeAny> extends BaseQuery<T> {
       schema: fieldSchema,
     });
   }
+
+  grabOne$<GrabOneType extends z.ZodType>(
+    name: string,
+    fieldSchema: GrabOneType
+  ) {
+    return new EntityQuery<z.ZodEffects<GrabOneType>>({
+      query: this.query + `.${name}`,
+      schema: nullToUndefined(fieldSchema),
+    });
+  }
 }
 
 /**
  * Unknown, comes out of pipe and is starting point for queries.
  */
 export class UnknownQuery extends EntityQuery<z.ZodUnknown> {
-  constructor(payload: Payload<z.ZodUnknown>) {
-    super(payload);
+  constructor(payload: Pick<Payload<z.ZodUnknown>, "query">) {
+    super({ ...payload, schema: z.unknown() });
   }
 
   // filter to an unknown array
@@ -91,6 +134,20 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
     return grab(this.query, this.schema, selection, conditionalSelections);
   }
 
+  grab$<
+    S extends Selection,
+    CondSelections extends Record<string, Selection> | undefined
+  >(selection: S, conditionalSelections?: CondSelections) {
+    return grab(
+      this.query,
+      this.schema,
+      nullToUndefined(selection),
+      conditionalSelections
+        ? nullToUndefinedOnConditionalSelection(conditionalSelections)
+        : conditionalSelections
+    );
+  }
+
   grabOne<GrabOneType extends z.ZodType>(
     name: string,
     fieldSchema: GrabOneType
@@ -101,8 +158,23 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
     });
   }
 
+  grabOne$<GrabOneType extends z.ZodType>(
+    name: string,
+    fieldSchema: GrabOneType
+  ) {
+    return new ArrayQuery<z.ZodEffects<GrabOneType>>({
+      query: this.query + `.${name}`,
+      schema: z.array(nullToUndefined(fieldSchema)),
+    });
+  }
+
   order(...orderings: `${string} ${"asc" | "desc"}`[]): ArrayQuery<T> {
     this.query += `|order(${orderings.join(", ")})`;
+    return this;
+  }
+
+  score(...scores: string[]): ArrayQuery<T> {
+    this.query += `|score(${scores.join(", ")})`;
     return this;
   }
 
@@ -124,8 +196,8 @@ export class ArrayQuery<T extends z.ZodTypeAny> extends BaseQuery<
 }
 
 export class UnknownArrayQuery extends ArrayQuery<z.ZodUnknown> {
-  constructor(payload: Payload<SafeZodArray<z.ZodUnknown>>) {
-    super(payload);
+  constructor(payload: Pick<Payload<SafeZodArray<z.ZodUnknown>>, "query">) {
+    super({ ...payload, schema: safeZodArray(z.unknown()) });
   }
 
   deref() {
